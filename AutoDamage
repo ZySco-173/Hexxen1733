@@ -1,0 +1,147 @@
+/**
+ * HeXXen 1733 - Universal-Schadensautomatik (V13)
+ * - NSC-Fix: Schaden wird auf 'system.health.wound' addiert
+ * - Spieler-Fix: Schaden wird von 'system.health.value' abgezogen
+ * - Globaler Target-Release für GM und Spieler
+ * - Inklusive Abbrechen-Button
+ */
+
+if (window.damageHook) {
+    Hooks.off("createChatMessage", window.damageHook);
+}
+
+window.damageHook = Hooks.on("createChatMessage", async (msg) => {
+    if (!game.user.isGM) return;
+
+    setTimeout(async () => {
+        const chatMessage = document.querySelector(`[data-message-id="${msg.id}"]`);
+        if (!chatMessage) return;
+
+        // --- BASIS-WERTE ---
+        const successValue = parseInt(chatMessage.querySelector('.success-value')?.innerText) || 0;
+        const damageTotal = parseInt(chatMessage.querySelector('.damage-total')?.innerText) || 0;
+        if (successValue < 1) return;
+
+        // --- ZIEL-ERKENNUNG (GM oder SPIELER) ---
+        let targets = Array.from(game.user.targets);
+        const playerUser = game.users.get(msg.author.id);
+        if (targets.length === 0 && playerUser) {
+            targets = Array.from(playerUser.targets);
+        }
+
+        if (targets.length === 0) return;
+        const target = targets[0]; 
+        const actor = target.actor;
+        const attackerName = msg.alias || "Unbekannter Angreifer";
+
+        // Panzerwert (PW)
+        const pwValue = parseInt(actor.system.temp?.pw) || parseInt(actor.system.armorValue) || 0;
+        const initialDamage = Math.max(0, damageTotal - pwValue);
+        const fullText = chatMessage.innerText;
+
+        // --- ZUSTANDS-LOGIK ---
+        const calculateExtra = (term, text) => {
+            const regex = new RegExp(`\\+(\\d+)\\s+${term}[^]*?(?:je|pro|für|alle)\\s+(\\d+)`, "i");
+            const match = text.match(regex);
+            if (match) {
+                const bonus = parseInt(match[1]);
+                const rate = parseInt(match[2]);
+                return { val: Math.floor(successValue / rate) * bonus, bonus, rate };
+            }
+            return { val: 0, bonus: 0, rate: 0 };
+        };
+
+        const extra = {
+            mdmg: calculateExtra("Malus", fullText),
+            ldmg: calculateExtra("Lähmung", fullText),
+            idmg: calculateExtra("Innerer", fullText),
+            odmg: calculateExtra("Äußerer", fullText)
+        };
+
+        let effectsHtml = "";
+        const labels = { mdmg: "Malus", ldmg: "Lähmung", idmg: "Innerer", odmg: "Äußerer" };
+        for (const [key, data] of Object.entries(extra)) {
+            if (data.val > 0) {
+                effectsHtml += `
+                    <div style="border-bottom: 1px solid #eee; padding: 2px 0;">
+                        <b>+${data.val} ${labels[key]}</b><br>
+                        <small style="color: #666;">(${successValue} Erf. / ${data.rate}er Rate * ${data.bonus})</small>
+                    </div>`;
+            }
+        }
+
+        // --- DIALOG ---
+        const { DialogV2 } = foundry.applications.api;
+        await DialogV2.confirm({
+            window: { title: `Kampf-Analyse` },
+            content: `
+                <div style="text-align: center; font-family: 'Signika', sans-serif;">
+                    <p style="margin: 0 0 10px 0;"><b>${attackerName}</b> → <b>${target.name}</b></p>
+                    <div style="background: rgba(0,0,0,0.05); padding: 10px; border-radius: 5px; border: 1px solid #ccc; margin-bottom: 10px;">
+                        <label><b>Schaden (LeP-Verlust):</b></label><br>
+                        <input type="number" id="override-damage" value="${initialDamage}" 
+                               style="width: 70px; text-align: center; font-size: 1.3em; margin: 5px 0;">
+                        <p style="font-size: 0.8em; color: #666; margin: 0;">
+                            Basis: ${damageTotal} | Panzerwert: -${pwValue}
+                        </p>
+                    </div>
+                    <div style="background: rgba(0,0,0,0.05); padding: 10px; border-radius: 5px; border: 1px solid #ccc;">
+                        <p style="margin: 0 0 5px 0; font-weight: bold; text-decoration: underline;">Errechnete Zustände:</p>
+                        ${effectsHtml || "<i>Keine Effekte erkannt</i>"}
+                    </div>
+                </div>`,
+            yes: {
+                label: "Übernehmen",
+                icon: "fas fa-check",
+                callback: async () => {
+                    const finalDamage = Number(document.getElementById("override-damage").value) || 0;
+                    const updates = {};
+
+                    const isNPC = actor.type === "npc" || actor.type === "monster" || !actor.system.resources;
+
+                    if (isNPC) {
+                        const currentWounds = Number(actor.system.health?.wound) || 0;
+                        const currentHP = Number(actor.system.health?.value) || 0;
+                        updates["system.health.wound"] = currentWounds + finalDamage;
+                        updates["system.health.value"] = Math.max(0, currentHP - finalDamage);
+                    } else {
+                        const currentHP = Number(actor.system.health?.value) || 0;
+                        updates["system.health.value"] = Math.max(0, currentHP - finalDamage);
+                    }
+
+                    if (finalDamage > 0) {
+                        if (actor.system.resources) { 
+                            if (extra.mdmg.val > 0) updates["system.resources.mdmg"] = Number((actor.system.resources.mdmg || 0) + extra.mdmg.val);
+                            if (extra.ldmg.val > 0) updates["system.resources.ldmg"] = Number((actor.system.resources.ldmg || 0) + extra.ldmg.val);
+                            if (extra.idmg.val > 0) updates["system.resources.idmg"] = Number((actor.system.resources.idmg || 0) + extra.idmg.val);
+                            if (extra.odmg.val > 0) updates["system.resources.odmg"] = Number((actor.system.resources.odmg || 0) + extra.odmg.val);
+                        } else if (actor.system.influences) { 
+                            if (extra.mdmg.val > 0) updates["system.influences.penaltyLevel"] = Number((actor.system.influences.penaltyLevel || 0) + extra.mdmg.val);
+                            if (extra.idmg.val > 0) updates["system.influences.innerDamage"] = Number((actor.system.influences.innerDamage || 0) + extra.idmg.val);
+                            if (extra.odmg.val > 0) updates["system.influences.outerDamage"] = Number((actor.system.influences.outerDamage || 0) + extra.odmg.val);
+                        }
+                    }
+
+                    await actor.update(updates);
+                    
+                    game.user.targets.forEach(t => t.setTarget(false, {releaseOthers: true}));
+                    if (playerUser) {
+                        game.socket.emit("userActivity", playerUser.id, {targets: []});
+                    }
+
+                    ui.notifications.info(`**${target.name}** wurde aktualisiert.`);
+                }
+            },
+            no: {
+                label: "Abbrechen",
+                icon: "fas fa-times",
+                callback: () => {
+                    ui.notifications.info("Schadensübernahme abgebrochen.");
+                }
+            },
+            defaultAction: "no"
+        });
+    }, 300);
+});
+
+ui.notifications.info("HeXXen-Automatik: Auto Damage AKTIVIERT");
