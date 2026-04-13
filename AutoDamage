@@ -3,7 +3,6 @@
  * - NSC-Fix: Schaden wird auf 'system.health.wound' addiert
  * - Spieler-Fix: Schaden wird von 'system.health.value' abgezogen
  * - Globaler Target-Release für GM und Spieler
- * - Inklusive Abbrechen-Button
  */
 
 if (window.damageHook) {
