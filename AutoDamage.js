@@ -3,6 +3,9 @@
  * - NSC-Fix: Schaden wird auf 'system.health.wound' addiert
  * - Spieler-Fix: Schaden wird von 'system.health.value' abgezogen
  * - Globaler Target-Release für GM und Spieler
+ * - Erkennung von Zustandsboni (Malus, Lähmung, Innerer/Äußerer Schaden) aus Chat-Text
+ * - Dialog mit Schadensübersicht und manueller Anpassung vor Bestätigung
+ * - Kompatibel mit NSCs ohne Ressourcen (z.B. einfache Monster)
  */
 
 if (window.damageHook) {
