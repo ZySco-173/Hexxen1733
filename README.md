@@ -35,6 +35,16 @@ Ziel des Angriffs muss als Target (auswählen und mit T markieren) gewählt sein
 
 *Target-Release:* Hebt nach Abschluss der Aktion die Markierungen (Targets) auf, um den Spielfluss für die nächste Aktion zu bereinigen. (Nur beim Gamemaster, beim Spieler nicht möglich)
 </details>
+
+## Add Enemys 
+<details>
+<mark>Voraussetzung:</mark>
+Es muss per Zeichentool ein Rahmen gezeichnet werden (Muss nicht sichtbar sein), als Textbezeichnung muss dieser Rahmen "SpawnZone" heißen. Zusätzlich muss es einen Ordner unter "Actors" geben in dem eure Gegenertypen zu finden sind. Der Name der Zone und des Ordners können im Macro angepasst werden.
+<mark>Funktionen</mark>
+*Gegner wählen:* Per DropDown bekommt ihr alle Actor aus dem angewählten Ordner angezeigt 
+*Anzahl Gegner:* Legt fest wie viele Token Random innerhalb der SpawnZone erstellt werden
+*Anzahl Spieler:* Ist nur bei BOSS NPCs interessant, da hier direkt die Lebenspunkte des NPCs hochgerechnet werden auf die Jägeranzahl.
+</details>
 ---
 
 
